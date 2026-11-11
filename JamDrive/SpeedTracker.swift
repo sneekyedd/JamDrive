@@ -21,6 +21,17 @@ final class SpeedTracker: NSObject, CLLocationManagerDelegate {
 
     var authorizationStatus: CLAuthorizationStatus { manager.authorizationStatus }
 
+    /// False when "Precise Location" is switched off for JamDrive. iOS then gives a rough
+    /// position only every few minutes, which is useless for measuring speed.
+    var hasPreciseLocation: Bool { manager.accuracyAuthorization == .fullAccuracy }
+
+    /// Asks iOS to turn on precise location for this session. iOS shows a one-time popup
+    /// using the "Driving" explanation in Info.plist.
+    func requestPreciseLocation() {
+        guard !hasPreciseLocation else { return }
+        manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "Driving")
+    }
+
     func requestPermission() {
         manager.requestWhenInUseAuthorization()
     }
@@ -31,6 +42,7 @@ final class SpeedTracker: NSObject, CLLocationManagerDelegate {
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
+        requestPreciseLocation()
     }
 
     func stop() {

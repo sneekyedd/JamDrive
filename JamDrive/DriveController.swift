@@ -16,6 +16,8 @@ final class DriveController: ObservableObject {
     /// The volume JamDrive is currently applying, 0...1.
     @Published private(set) var volume: Double
     @Published private(set) var isMusicPlaying = false
+    /// False when iOS's "Precise Location" switch is off for JamDrive.
+    @Published private(set) var hasPreciseLocation = true
     @Published var showVolumeTip = false
     @Published var showLocationDeniedAlert = false
 
@@ -29,10 +31,21 @@ final class DriveController: ObservableObject {
     private var startWhenAuthorized = false
     private var tipTask: Task<Void, Never>?
 
+    // GPS only reports about once a second. Between readings we estimate the speed from
+    // how quickly it was changing (acceleration), so the speed and volume move smoothly
+    // and keep up with you instead of jumping a second late.
+    private var gpsSpeed: Double = 0              // last measured speed, m/s
+    private var gpsSpeedDate: Date?
+    private var acceleration: Double = 0          // m/s per second; negative when braking
+    private var lastLocation: CLLocation?
+    private let maxPredictAhead = 1.2             // never guess more than 1.2 s past the last reading
+    private let maxAcceleration = 6.0             // about 0.6 g; anything bigger is GPS noise
+
     // Fade tuning: how fast the volume follows changes in speed.
+    // Hard acceleration or braking moves the target quickly, so the volume moves quickly too.
     private let tickInterval = 1.0 / 20.0     // update 20 times a second
-    private let fadeTimeConstant = 0.8        // seconds to close most of the gap
-    private let maxFadeRate = 0.35            // never move more than 35% of full volume per second
+    private let fadeTimeConstant = 0.25       // seconds to close most of the gap
+    private let maxFadeRate = 1.5             // safety cap: at most 150% of full volume per second
 
     init(settings: DriveSettings) {
         self.settings = settings
@@ -84,6 +97,11 @@ final class DriveController: ObservableObject {
         speed = 0
         lastFixDate = nil
         tickCount = 0
+        gpsSpeed = 0
+        gpsSpeedDate = nil
+        acceleration = 0
+        lastLocation = nil
+        hasPreciseLocation = tracker.hasPreciseLocation
 
         activateAudioSession()
         // Fade from wherever the phone's volume is right now.
@@ -118,16 +136,48 @@ final class DriveController: ObservableObject {
 
         lastFixDate = Date()
         gpsState = .locked
+        hasPreciseLocation = tracker.hasPreciseLocation
 
-        // A negative speed means "unknown" for this reading. Keep the last one.
-        guard location.speed >= 0 else { return }
+        let previous = lastLocation
+        lastLocation = location
+
+        // iOS's own speed reading (from the GPS signal's Doppler shift) is the most accurate.
+        // If it's missing or unreliable, work it out from the distance since the last reading.
+        var measured: Double?
+        if location.speed >= 0, location.speedAccuracy < 0 || location.speedAccuracy <= 3 {
+            measured = location.speed
+        } else if let previous {
+            let dt = location.timestamp.timeIntervalSince(previous.timestamp)
+            if dt > 0.2, dt < 3, location.horizontalAccuracy < 20 {
+                measured = location.distance(from: previous) / dt
+            }
+        }
+        guard var raw = measured else { return }
 
         // GPS jitters a little while parked; treat anything under about 1 mph as stopped.
-        let raw = location.speed < 0.5 ? 0 : location.speed
-        // Light smoothing so one noisy reading doesn't jerk the volume around.
-        var smoothed = speed + (raw - speed) * 0.6
-        if smoothed < 0.05 { smoothed = 0 }
-        speed = smoothed
+        if raw < 0.5 { raw = 0 }
+
+        let now = location.timestamp
+        if let lastDate = gpsSpeedDate {
+            let dt = now.timeIntervalSince(lastDate)
+            if dt > 0.2 {
+                let newAccel = min(max((raw - gpsSpeed) / dt, -maxAcceleration), maxAcceleration)
+                // Blend with the previous value so one odd reading doesn't throw it off.
+                acceleration = acceleration * 0.4 + newAccel * 0.6
+            }
+        }
+        if raw == 0 { acceleration = 0 }
+        gpsSpeed = raw
+        gpsSpeedDate = now
+    }
+
+    /// Our best guess at the speed right now: the last GPS reading, plus however much
+    /// the speed has probably changed since, based on the recent acceleration.
+    private func estimatedSpeed() -> Double {
+        guard let gpsSpeedDate else { return gpsSpeed }
+        let elapsed = min(max(Date().timeIntervalSince(gpsSpeedDate), 0), maxPredictAhead)
+        let estimate = gpsSpeed + acceleration * elapsed
+        return estimate < 0.3 ? 0 : estimate
     }
 
     private func handleAuthorization(_ status: CLAuthorizationStatus) {
@@ -163,6 +213,9 @@ final class DriveController: ObservableObject {
 
     /// Runs 20 times a second: nudges the volume a little toward the target.
     private func step() {
+        let estimate = estimatedSpeed()
+        if abs(estimate - speed) > 0.01 { speed = estimate }
+
         let target = settings.targetVolume(forSpeed: speed)
         let gap = target - volume
 

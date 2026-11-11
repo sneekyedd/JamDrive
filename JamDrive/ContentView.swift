@@ -148,6 +148,9 @@ struct ContentView: View {
     }
 
     private var statusText: String {
+        if controller.isRunning && !controller.hasPreciseLocation {
+            return "Turn on Precise Location in Settings"
+        }
         switch controller.gpsState {
         case .off: return "Tap start before you drive"
         case .searching: return "Finding GPS…"
@@ -156,6 +159,7 @@ struct ContentView: View {
     }
 
     private var statusColor: Color {
+        if controller.isRunning && !controller.hasPreciseLocation { return .orange }
         switch controller.gpsState {
         case .off: return Theme.dimText
         case .searching: return .orange
