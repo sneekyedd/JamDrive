@@ -76,7 +76,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("Remind me to turn the volume up", isOn: $settings.showVolumeReminder)
+                    Toggle("Show the car stereo tip when I start", isOn: $settings.showVolumeReminder)
                 }
 
                 Section {

@@ -276,7 +276,7 @@ final class DriveController: ObservableObject {
         showVolumeTip = true
         tipTask?.cancel()
         tipTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(5))
+            try? await Task.sleep(for: .seconds(8))
             guard !Task.isCancelled else { return }
             self?.showVolumeTip = false
         }

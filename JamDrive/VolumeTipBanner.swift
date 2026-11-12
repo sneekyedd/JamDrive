@@ -6,15 +6,15 @@ struct VolumeTipBanner: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "speaker.wave.3.fill")
+            Image(systemName: "car.fill")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Theme.accent)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 3) {
-                Text("For best results, turn the volume all the way up")
+                Text("Set your car stereo's volume")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.primaryText)
-                Text("Turn your car stereo up too. JamDrive will set your phone's volume as your speed changes.")
+                Text("JamDrive controls your phone's volume and reaches its top level at top speed. Set the car stereo to the loudest you'd want to hear at that point.")
                     .font(.system(size: 13, design: .rounded))
                     .foregroundStyle(Theme.secondaryText)
             }

@@ -10,7 +10,7 @@ An iPhone app that turns your music up as you drive faster and back down as you 
 ## Using it
 
 1. Start Spotify.
-2. Open JamDrive and tap **START**. A small notice reminds you to turn the volume up.
+2. Open JamDrive and tap **START**. A small notice reminds you to set your car stereo to the loudest level you'd want at top speed, since JamDrive controls the phone's volume.
 3. Switch back to Spotify or Maps. JamDrive keeps running in the background, and a blue location indicator shows at the top of the screen.
 4. Tap **STOP** when you arrive. Location tracking turns off and the volume stays where it was.
 
