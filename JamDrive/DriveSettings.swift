@@ -88,7 +88,7 @@ final class DriveSettings: ObservableObject {
         useKPH = defaults.object(forKey: Key.useKPH) as? Bool ?? false
         showVolumeReminder = defaults.object(forKey: Key.showVolumeReminder) as? Bool ?? true
         curveShape = defaults.object(forKey: Key.curveShape) as? Double ?? DriveSettings.defaultCurveShape
-        calmInBackground = defaults.object(forKey: Key.calmInBackground) as? Bool ?? true
+        calmInBackground = defaults.object(forKey: Key.calmInBackground) as? Bool ?? false
     }
 
     /// The heart of the app: turns a speed into a volume.
