@@ -34,6 +34,29 @@ struct SettingsView: View {
                     Text("Volume climbs smoothly from the parked level to the top-speed level. Your iPhone has 16 volume clicks, so each click is about 6%.")
                 }
 
+                Section {
+                    VolumeCurveGraph(settings: settings)
+                        .frame(height: 140)
+                        .padding(.vertical, 6)
+                    VStack(spacing: 4) {
+                        Slider(value: $settings.curveShape, in: -1...1, step: 0.05)
+                        HStack {
+                            Text("Slow start")
+                            Spacer()
+                            Text(curveShapeLabel)
+                                .foregroundStyle(Theme.accent)
+                            Spacer()
+                            Text("Quick start")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Curve shape")
+                } footer: {
+                    Text("Quick start makes the music loud sooner in stop-and-go traffic, while still saving the top of the range for when you floor it. Slow start keeps it quieter around town and saves the big jump for the highway.")
+                }
+
                 Section("Preview") {
                     ForEach(previewSpeeds, id: \.self) { displaySpeed in
                         HStack {
@@ -44,6 +67,12 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                }
+
+                Section {
+                    Toggle("Fewer volume pop-ups in other apps", isOn: $settings.calmInBackground)
+                } footer: {
+                    Text("iOS shows its volume pop-up whenever JamDrive changes the volume while you're in another app, like Maps. With this on, JamDrive waits until the volume needs to move by at least one click, and changes it at most every few seconds. In JamDrive itself, it always adjusts smoothly.")
                 }
 
                 Section {
@@ -85,6 +114,16 @@ struct SettingsView: View {
         }
     }
 
+    private var curveShapeLabel: String {
+        switch settings.curveShape {
+        case ..<(-0.6): return "Much slower start"
+        case ..<(-0.1): return "Slower start"
+        case ...0.1: return "Straight line"
+        case ...0.6: return "Quicker start"
+        default: return "Much quicker start"
+        }
+    }
+
     private var unitFactor: Double { settings.useKPH ? Units.kphPerMph : 1 }
     private var unitLabel: String { settings.useKPH ? "km/h" : "mph" }
 
@@ -109,5 +148,54 @@ struct SettingsView: View {
     private func previewVolume(atDisplaySpeed displaySpeed: Double) -> Double {
         let perMetersPerSecond = settings.useKPH ? Units.kphPerMetersPerSecond : Units.mphPerMetersPerSecond
         return settings.targetVolume(forSpeed: displaySpeed / perMetersPerSecond)
+    }
+}
+
+/// A small chart of volume (up) against speed (across), so you can see what the curve slider does.
+private struct VolumeCurveGraph: View {
+    @ObservedObject var settings: DriveSettings
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack(alignment: .topLeading) {
+                // Faint straight line for comparison.
+                Path { path in
+                    path.move(to: point(progress: 0, value: line(0), in: size))
+                    path.addLine(to: point(progress: 1, value: line(1), in: size))
+                }
+                .stroke(Theme.dimText, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+
+                // The actual curve.
+                Path { path in
+                    let steps = 60
+                    for i in 0...steps {
+                        let p = Double(i) / Double(steps)
+                        let value = settings.parkedVolume + (settings.topVolume - settings.parkedVolume) * settings.curved(p)
+                        let pt = point(progress: p, value: value, in: size)
+                        if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+                    }
+                }
+                .stroke(Theme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+
+                Text("Volume")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("Speed →")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Volume curve graph")
+    }
+
+    private func line(_ p: Double) -> Double {
+        settings.parkedVolume + (settings.topVolume - settings.parkedVolume) * p
+    }
+
+    private func point(progress: Double, value: Double, in size: CGSize) -> CGPoint {
+        CGPoint(x: progress * size.width, y: (1 - value) * size.height)
     }
 }

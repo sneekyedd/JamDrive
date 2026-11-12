@@ -47,6 +47,11 @@ final class DriveController: ObservableObject {
     private let fadeTimeConstant = 0.25       // seconds to close most of the gap
     private let maxFadeRate = 1.5             // safety cap: at most 150% of full volume per second
 
+    // "Fewer pop-ups" mode, used while another app is on screen.
+    private let oneClick = 1.0 / Double(Units.volumeClicks)   // about 6%
+    private let calmMinInterval = 3.0                         // seconds between changes
+    private var lastApplyDate: Date?
+
     init(settings: DriveSettings) {
         self.settings = settings
         self.volume = settings.parkedVolume
@@ -232,11 +237,20 @@ final class DriveController: ObservableObject {
             volume = newVolume
         }
 
-        // Only touch the phone's volume when our number has actually moved. If you press the
-        // volume buttons, JamDrive ignores it, and the next speed change sets its own level again.
-        if abs(volume - lastAppliedVolume) >= 0.002 || (volume == target && volume != lastAppliedVolume) {
-            SystemVolume.shared.set(volume)
-            lastAppliedVolume = volume
+        let inOtherApp = UIApplication.shared.applicationState != .active
+        if inOtherApp && settings.calmInBackground {
+            // iOS shows its volume pop-up for every change made while another app is on screen.
+            // So wait until the target is at least one volume click away, then jump straight
+            // to it in one go, and don't do that more often than every few seconds.
+            let sinceLastApply = lastApplyDate.map { Date().timeIntervalSince($0) } ?? .infinity
+            if abs(target - lastAppliedVolume) >= oneClick, sinceLastApply >= calmMinInterval {
+                volume = target
+                applyVolume(target)
+            }
+        } else if abs(volume - lastAppliedVolume) >= 0.002 || (volume == target && volume != lastAppliedVolume) {
+            // Only touch the phone's volume when our number has actually moved. If you press the
+            // volume buttons, JamDrive ignores it, and the next speed change sets its own level again.
+            applyVolume(volume)
         }
 
         // Once a second: check whether music is playing and whether GPS has gone quiet.
@@ -248,6 +262,12 @@ final class DriveController: ObservableObject {
                 gpsState = .searching
             }
         }
+    }
+
+    private func applyVolume(_ value: Double) {
+        SystemVolume.shared.set(value)
+        lastAppliedVolume = value
+        lastApplyDate = Date()
     }
 
     // MARK: Volume tip banner
